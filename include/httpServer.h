@@ -16,12 +16,17 @@ namespace YS
 class httpServer
 {
 public:
-    static httpServer* instance();
+    static httpServer* Instance();
 
 private:
     static httpServer* httpserver;
 
 public:
+    struct Client
+    {
+        
+    };
+
     struct ClientInfo
     {
         std::string     ip;
@@ -42,10 +47,14 @@ public:
     void Start(const std::string& ip, const std::string& port, const std::string& webPath = "");
 
 public:
-    bool Get(const std::string& reqGetStr, std::function<bool(std::string)> Func);
+    bool Get(const std::string& reqGetStr, std::function<bool(const std::string&, const uint16_t&, const httpHeader&)> Func);
+    bool Post(const std::string& reqPostStr, std::function<bool(const std::string&, const uint16_t&, const httpHeader&)> Func);
+
 
 private:
     void Run();
+    void ConnectAccept(int conectSocketfd);
+    void ConnectHandle(int connectSocketfd);
     void ClientAdd(int socketfd, std::string socketip, uint16_t socketport);
     void ClientDel(int socketfd);
 
@@ -56,8 +65,8 @@ private:
     int         socket_fd;
     int         epoll_fd;
 
-    std::unordered_map<std::string, std::function<bool(std::string)>> ReqFunc_Get;
-    std::unordered_map<std::string, std::function<bool(std::string)>> ReqFunc_Post;
+    std::unordered_map<std::string, std::function<bool(const std::string&, const uint16_t&, const httpHeader&)>> ReqFunc_Get;
+    std::unordered_map<std::string, std::function<bool(const std::string&, const uint16_t&, const httpHeader&)>> ReqFunc_Post;
 
 private:
     std::unordered_map<int, ClientInfo> mapClientInfo;

@@ -81,6 +81,7 @@ public:
     HeaderStatus Status();
     HeaderStatus Append(const std::string& headerStr_);
     HeaderStatus Append(const char* headerCstr_);
+    void Clear();
 
     const HeaderReqLine& Req();
     const std::unordered_map<std::string, std::string> Headers();

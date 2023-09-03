@@ -63,6 +63,22 @@ httpHeader::HeaderStatus httpHeader::Append(const char* headerCstr_)
     return status;
 }
 
+void httpHeader::Clear()
+{
+    reqParserStatus         = false;
+    headersParserStatus     = false;
+    contentParserStatus     = false;
+
+    headerStr.clear();
+    headerContentSize = 0;
+    headerVec.clear();
+
+    status = HeaderStatus::AnalysisCompleteNo;
+    req = {ReqMethod::No, "", ReqType::NO, 0 };
+    headers.clear();
+    content.clear();
+}
+
 const httpHeader::HeaderReqLine& httpHeader::Req()
 {
     return req;

@@ -24,7 +24,7 @@ httpServer::httpServer()
 httpServer::~httpServer() {}
 
 
-httpServer* httpServer::instance()
+httpServer* httpServer::Instance()
 {
     return httpserver;
 }
@@ -100,6 +100,16 @@ void httpServer::Start(const std::string& ip_, const std::string& port_, const s
     Run();
 }
 
+bool httpServer::Get(const std::string& reqGetStr, std::function<bool(const std::string&, const uint16_t&, const httpHeader&)> Func)
+{
+    return ReqFunc_Get.emplace(reqGetStr, std::move(Func)).second;
+}
+
+bool httpServer::Post(const std::string& reqPostStr, std::function<bool(const std::string&, const uint16_t&, const httpHeader&)> Func)
+{
+    return ReqFunc_Post.emplace(reqPostStr, std::move(Func)).second;
+}
+
 void httpServer::Run()
 {
     // 创建epoll_wait返回用的内存
@@ -118,51 +128,76 @@ void httpServer::Run()
         for (int epWaitNum = 0; epWaitNum < epWaitSize; ++epWaitNum)
         {
             epoll_event& t_epenv{ vecEpenv[epWaitNum] };
-            // 如果触发epoll的自己的套接字, 说明有人请求连接
-            if (t_epenv.data.fd == socket_fd)
-            {
-                client_socket_fd = ::accept(socket_fd, reinterpret_cast<::sockaddr*>(&client_sockaddr_in), &client_socklen);
-                if (client_socket_fd == 0) continue;
-
-                // 同意连接, 开始监听
-                ClientAdd(client_socket_fd, ::inet_ntoa(client_sockaddr_in.sin_addr), ::ntohs(client_sockaddr_in.sin_port));
-            }
-            else 
-            {
-                std::string readbuff(1024, '\0');
-                int readNum = read(t_epenv.data.fd, readbuff.data(), readbuff.size());
-
-                // 对方断开连接
-                if (readNum < 1)
-                {
-                    ClientDel(t_epenv.data.fd);
-                    continue;
-                }
-
-                auto t_Client_iter{ mapClientInfo.find(t_epenv.data.fd) };
-                httpHeader& header {t_Client_iter->second.header};
-
-                // 接收对方消息
-                for (header.Append(readbuff.c_str()); readNum > 0 && header.Status() == httpHeader::HeaderStatus::AnalysisCompleteNo; header.Append(readbuff.c_str()))
-                {
-                    readbuff.clear();
-                    readNum = read(t_epenv.data.fd, readbuff.data(), readbuff.size());
-                }
-
-                if (header.Status() == httpHeader::HeaderStatus::HeaderFormatError)
-                {
-                    ClientDel(t_epenv.data.fd);
-                    std::cout << "header 格式有误\n";
-                    continue;
-                }
-                else if (header.Status() == httpHeader::HeaderStatus::AnalysisCompleteOK)
-                {
-                    ClientDel(t_epenv.data.fd);
-                    std::cout << "header 格式完整\n";
-                    continue;
-                }
-            }
+            
+            if (t_epenv.data.fd == socket_fd)           // 如果触发epoll的自己的套接字, 说明有人请求连接
+                ConnectAccept(t_epenv.data.fd);
+            else                                        // 否则就是发送了数据过来
+                ConnectHandle(t_epenv.data.fd);
         }
+    }
+}
+
+void httpServer::ConnectAccept(int connectSocketfd)
+{
+    ::sockaddr_in client_sockaddr_in{};
+    ::socklen_t client_socklen{ sizeof(client_sockaddr_in) };
+    int client_socket_fd = ::accept(socket_fd, reinterpret_cast<::sockaddr*>(&client_sockaddr_in), &client_socklen);
+    if (client_socket_fd < 1) return;
+
+    // 同意连接, 开始监听
+    ClientAdd(client_socket_fd, ::inet_ntoa(client_sockaddr_in.sin_addr), ::ntohs(client_sockaddr_in.sin_port));
+}
+
+void httpServer::ConnectHandle(int connectSocketfd)
+{
+    std::string readbuff(1024, '\0');
+    int readNum = read(connectSocketfd, readbuff.data(), readbuff.size());
+
+    // 对方断开连接
+    if (readNum < 1)
+    {
+        ClientDel(connectSocketfd);
+        return;
+    }
+
+    auto t_Client_iter{ mapClientInfo.find(connectSocketfd) };
+    httpHeader& header {t_Client_iter->second.header};
+
+    // 接收对方消息
+    for (header.Append(readbuff.c_str()); readNum > 0 && header.Status() == httpHeader::HeaderStatus::AnalysisCompleteNo; header.Append(readbuff.c_str()))
+    {
+        readbuff.clear();
+        readNum = read(connectSocketfd, readbuff.data(), readbuff.size());
+    }
+
+    if (header.Status() == httpHeader::HeaderStatus::HeaderFormatError)
+    {
+        ClientDel(connectSocketfd);
+        std::cout << "header 格式有误\n";
+        return;
+    }
+    else if (header.Status() == httpHeader::HeaderStatus::AnalysisCompleteOK)
+    {
+        //ClientDel(connectSocketfd);
+        //std::cout << "header 格式完整\n";
+        const auto& FuncIter{ ReqFunc_Get.find(header.Req().url) } ;
+        if (FuncIter == ReqFunc_Get.end())
+        {
+            std::cout << "header 格式完整\t但是没有指定 URL(" << header.Req().url << ") 对应的处理方法\n";
+            ClientDel(connectSocketfd);
+        }
+        else
+        {
+            std::cout << "header 格式完整\t开始运行指定 URL(" << header.Req().url <<  ") 对应的处理方法\n";
+            if (FuncIter->second(t_Client_iter->second.ip, t_Client_iter->second.port, header))
+            {
+                std::cout << "指定 URL(" << header.Req().url <<  ") 对应的处理方法返回了处理后断开连接\n";
+                ClientDel(connectSocketfd);
+            }
+            header.Clear();
+        }
+
+        return;
     }
 }
 
