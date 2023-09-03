@@ -1,18 +1,11 @@
 #include "httpServer.h"
 
-#include <cerrno>
-#include <cstdint>
-#include <cstring>
-#include <optional>
 #include <string>
 #include <unistd.h>
-#include <cstddef>
-#include <cstdlib>
 #include <netinet/in.h>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-#include <utility>
 
 
 namespace Ys
@@ -108,7 +101,6 @@ void httpServer::run()
 {
     // 创建epoll_wait返回用的内存
     std::vector<epoll_event> vecEpenv(1024);
-    ::memset(vecEpenv.data(), 0, sizeof(epoll_event) * vecEpenv.size());
 
     // 用于接收连接时的临时变量
     int client_socket_fd = 0;

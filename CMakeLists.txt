@@ -6,7 +6,8 @@ project(webserver)
 
 include_directories(include)
 
-file(GLOB allSrc src/*.cpp)
+#file(GLOB allSrc src/*.cpp)
+aux_source_directory(src allSrc)
 
 add_executable(webserver main.cpp ${allSrc})
 
