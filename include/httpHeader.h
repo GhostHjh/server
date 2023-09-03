@@ -1,5 +1,5 @@
-#include <cstddef>
-#include <cstdint>
+#pragma once
+
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -46,6 +46,28 @@ public:
         std::string     url;
         ReqType         type;
         float           ver;
+
+        std::ostream& operator<<(std::ostream& o) const
+        {
+            switch (method)
+            {
+            case ReqMethod::GET:    o << "GET ";    break;
+            case ReqMethod::POST:   o << "POST ";   break;
+            default: {   o << "Error"; return o; }  break;
+            }
+
+            o << url;
+
+            switch (type)
+            {
+            case ReqType::HTTP:     o << "HTTP/";   break;
+            case ReqType::HTTPS:    o << "HTTPS/";  break;
+            default: { o << "Error"; return o; }    break;
+            }
+
+            o << ver;
+            return o;
+        }
     };
 
 public:
@@ -56,9 +78,13 @@ public:
     httpHeader(const httpHeader&);
 
 public:
-    bool IsAnalysisComplete();
+    HeaderStatus Status();
     HeaderStatus Append(const std::string& headerStr_);
     HeaderStatus Append(const char* headerCstr_);
+
+    const HeaderReqLine& Req();
+    const std::unordered_map<std::string, std::string> Headers();
+    const std::string Content();
 
 private:
     // str_ : 要解析的字符串    splistStr_ : 分割字符串     reVec_ : 接收的容器     return : 分割出的数量
@@ -75,6 +101,7 @@ private:
     std::vector<std::string>        headerVec;          // 解析出来的一行一行的数据
 
 private:
+    HeaderStatus                                    status;
     HeaderReqLine                                   req;
     std::unordered_map<std::string, std::string>    headers;
     std::string                                     content;

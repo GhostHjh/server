@@ -12,7 +12,7 @@ const std::string httpHeader::splistStr{"\r\n"};
 httpHeader::httpHeader()
     : reqParserStatus(false), headersParserStatus(false), contentParserStatus(false)
     , headerStr(""), headerContentSize(0), headerVec({})
-    , req({ReqMethod::No, "", ReqType::NO, 0 }), headers({}), content("")
+    ,status(HeaderStatus::AnalysisCompleteNo), req({ReqMethod::No, "", ReqType::NO, 0 }), headers({}), content("")
 {}
 
 httpHeader::httpHeader(const char* httpHeaderStr_)
@@ -32,33 +32,50 @@ httpHeader::httpHeader(const std::string& httpHeaderStr_)
 httpHeader::httpHeader(httpHeader&& a)
     : reqParserStatus(a.reqParserStatus), headersParserStatus(a.headersParserStatus), contentParserStatus(a.contentParserStatus)
     , headerStr(std::move(a.headerStr)), headerContentSize(a.headerContentSize), headerVec(std::move(a.headerVec))
-    , req(a.req), headers(std::move(a.headers)), content(std::move(a.content))
+    , status(a.status), req(a.req), headers(std::move(a.headers)), content(std::move(a.content))
 {}
 
 httpHeader::httpHeader(const httpHeader& a)
     : reqParserStatus(a.reqParserStatus), headersParserStatus(a.headersParserStatus), contentParserStatus(a.contentParserStatus)
     , headerStr(a.headerStr), headerContentSize(a.headerContentSize), headerVec(a.headerVec)
-    , req(a.req), headers(a.headers), content(a.content)
+    , status(a.status), req(a.req), headers(a.headers), content(a.content)
 {}
 //构造函数------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 
 //公开函数------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-bool httpHeader::IsAnalysisComplete()
+httpHeader::HeaderStatus httpHeader::Status()
 {
-    return reqParserStatus && headersParserStatus && contentParserStatus;
+    return status;
 }
 
 httpHeader::HeaderStatus httpHeader::Append(const std::string& headerStr_)
 {
     headerStr.append(headerStr_);
-    return Parser();
+    status = Parser();
+    return status;
 }
 
 httpHeader::HeaderStatus httpHeader::Append(const char* headerCstr_)
 {
     headerStr.append(headerCstr_);
-    return Parser();
+    status = Parser();
+    return status;
+}
+
+const httpHeader::HeaderReqLine& httpHeader::Req()
+{
+    return req;
+}
+
+const std::unordered_map<std::string, std::string> httpHeader::Headers()
+{
+    return headers;
+}
+
+const std::string httpHeader::Content()
+{
+    return content;
 }
 //公开函数------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
@@ -103,7 +120,7 @@ httpHeader::HeaderStatus httpHeader::Parser()
             
             // 解析请求类型
             {
-                if (reqLine.back() == 'G' || reqLine.back() == 'g') 
+                if (reqLine.front() == 'G' || reqLine.front() == 'g') 
                 {
                     if (reqLine.size() < 3 || reqLine[3] != ' '
                         || (reqLine[1] != 'E' && reqLine[1] != 'e')
@@ -113,7 +130,7 @@ httpHeader::HeaderStatus httpHeader::Parser()
                     req.method = ReqMethod::GET;
                     index = 4;
                 }
-                else if (reqLine.back() == 'P' || reqLine.back() == 'p') 
+                else if (reqLine.front() == 'P' || reqLine.front() == 'p') 
                 {
                     if (reqLine.size() < 4 || reqLine[4] != ' '
                         || (reqLine[1] != 'O' && reqLine[1] != 'o')
@@ -129,7 +146,7 @@ httpHeader::HeaderStatus httpHeader::Parser()
 
             // 解析请求URL
             {
-                size_t findindex{ reqLine.find_last_of(' ', index) };
+                size_t findindex{ reqLine.find(' ', index) };
                 if (findindex == std::string::npos || findindex < index) return HeaderStatus::HeaderFormatError;
 
                 req.url = reqLine.substr(index, findindex - index);
@@ -138,9 +155,6 @@ httpHeader::HeaderStatus httpHeader::Parser()
 
             // 解析请求协议和版本
             {
-                index =  reqLine.find('/', index);
-                if (index == std::string::npos) return HeaderStatus::HeaderFormatError;
-
                 if (reqLine[index] == 'H' || reqLine[index] == 'h') 
                 {
                     if ((reqLine[index + 1] != 'T' && reqLine[index + 1] != 't')
@@ -148,8 +162,16 @@ httpHeader::HeaderStatus httpHeader::Parser()
                         || (reqLine[index + 3] != 'P' && reqLine[index + 3] != 'p'))
                         return HeaderStatus::HeaderFormatError;
                     
-                    if (reqLine[index + 4] != 'S' || reqLine[index + 4] != 's') req.type = ReqType::HTTP;
-                    else req.type = ReqType::HTTPS;
+                    if (reqLine[index + 4] != 'S' || reqLine[index + 4] != 's')
+                    {
+                        req.type = ReqType::HTTP;
+                        index += 5;
+                    }
+                    else
+                    {
+                        req.type = ReqType::HTTPS;
+                        index += 6;
+                    }
                 }
                 else if (reqLine[index] == 'W' || reqLine[index] == 'w') 
                 {
@@ -157,6 +179,7 @@ httpHeader::HeaderStatus httpHeader::Parser()
                         return HeaderStatus::HeaderFormatError;
 
                     req.type = ReqType::WS;
+                    index += 3;
                 }
                 else return HeaderStatus::HeaderFormatError;
 
